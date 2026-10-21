@@ -75,7 +75,9 @@ class MCPRouter:
             return {"tools": tools_list}
         elif method == "tools/call":
             tool_name = params.get("name")
-            args = params.get("arguments", {})
+            if not tool_name:
+                raise MCPError(-32602, "Missing 'name' parameter in tools/call")
+            args = params.get("arguments") or {}
             return await self.execute_tool(tool_name, args)
         else:
             raise MCPError(-32601, f"Method not found: {method}")
@@ -85,12 +87,24 @@ class MCPRouter:
             raise MCPError(-32602, f"Unknown tool: {name}")
 
         definition, handler = self._tools[name]
+
+        # Validate required parameters from schema
+        required_props = definition.input_schema.get("required", [])
+        for prop in required_props:
+            if prop not in arguments:
+                return MCPResponse.text(
+                    f"Validation Error: Missing required parameter '{prop}' for tool '{name}'",
+                    is_error=True
+                ).to_dict()
+
         start_time = time.time()
         try:
             if inspect.iscoroutinefunction(handler):
                 res = await handler(**arguments)
             else:
                 res = handler(**arguments)
+                if inspect.isawaitable(res):
+                    res = await res
 
             duration_ms = (time.time() - start_time) * 1000
             self.telemetry.record(tool_name=name, duration_ms=duration_ms, success=True)

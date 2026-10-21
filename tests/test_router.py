@@ -44,7 +44,18 @@ class TestMCPRouter(unittest.TestCase):
             content = call_res["result"]["content"]
             self.assertEqual(content[0]["text"], "42")
 
-            # 4. Check Telemetry
+            # 4. Call tool with missing required argument
+            bad_call = json.dumps({
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {"name": "calculate_sum", "arguments": {"a": 15}},
+            })
+            bad_res = json.loads(await router.handle_request(bad_call))
+            self.assertTrue(bad_res["result"]["isError"])
+            self.assertIn("Missing required parameter 'b'", bad_res["result"]["content"][0]["text"])
+
+            # 5. Check Telemetry
             summary = router.telemetry.summary()
             self.assertEqual(summary["total_calls"], 1)
             self.assertEqual(summary["success_rate"], 1.0)
